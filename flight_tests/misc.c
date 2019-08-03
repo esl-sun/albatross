@@ -9,10 +9,12 @@
 #include <sys/ioctl.h>			//Needed for I2C port
 #include <linux/i2c-dev.h>		//Needed for I2C port
 #include <wiringPi.h>
+#include <gps.h>
 #include "misc.h"
 #include "hmc5883.h"
 #include "bmp085.h"
 #include "mpu6050.h"
+
 void calibrateSensors(double* means){
 
   int16_t* raw_gyro = malloc(4*sizeof(int16_t));
@@ -141,3 +143,56 @@ void calibrateSensors(double* means){
 		strcpy(f_name,filename);
 		return f_name;
 	}
+
+int gps_lock_status(struct gps_data_t* gps_data){
+	int rc;
+  if (gps_waiting (gps_data,100)) {
+      	/* read data */
+          if ((rc = gps_read(gps_data)) == -1) {
+            printf("error occured reading gps data. code: %d, reason: %s\n", rc, gps_errstr(rc));
+            return 0;
+        	} else {
+            /* Display data from the GPS receiver. */
+            			if ((gps_data->status == STATUS_FIX) &&
+               			(gps_data->fix.mode == MODE_2D || gps_data->fix.mode == MODE_3D) &&
+                		!isnan(gps_data->fix.latitude) &&
+                		!isnan(gps_data->fix.longitude) && !isnan(gps_data->fix.altitude)) {
+              return 1;
+            } else {
+              return 0;
+            }
+          }
+    }
+		return 0;
+
+}
+
+void get_gps_coord(struct gps_data_t* gps_data, int* error_code){
+
+	if (gps_waiting (gps_data,10000000)) {
+		/* read data */
+		if ((*error_code = gps_read(gps_data)) == -1) {
+	  	printf("error occured reading gps data. code: %d, reason: %s\n", *error_code, gps_errstr(*error_code));
+		}
+	}
+}
+
+void decode_spektrum(uint16_t rx_length,uint16_t channel_id,uint32_t* control,uint8_t* message,uint16_t step){
+
+  uint16_t position = 0;
+  uint16_t last = 0;
+
+  for(int i =0; i < rx_length; i++){
+
+    if(i%2){
+
+      channel_id = last & 0b11111100;
+      channel_id = channel_id >> 2;
+      last = last << 8;
+      position = message[i] | last;
+      control[step] = (int32_t)(position);
+      step += 1;
+    }
+    last = message[i];
+  }
+}

@@ -34,5 +34,5 @@ flight_test.c is the RC version of Albatross. Currently it is capable of control
 
 ### How to Compile
 ```
-gcc -o flight *.c -lm -lwiringPi -Wall -lpthread -std=c11
+gcc -o flight *.c -lm -lwiringPi -Wall -lpthread -std=c11 -lgps
 ```

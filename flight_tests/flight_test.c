@@ -11,11 +11,13 @@
 #include <string.h>
 #include <termios.h>		//Used for UART
 #include <softPwm.h>
+#include <gps.h>
 #include "misc.h"
 #include "bmp085.h"
 #include "hmc5883.h"
 #include "mpu6050.h"
 #include "hcla0050eu.h"
+
 
 // void calibrateSensors(double* means);
 // char* createNewLog();
@@ -37,6 +39,10 @@ int main(void){
   double* acc = malloc(4*sizeof(double));
   double* mag = malloc(4*sizeof(double));
   double* mean_values = malloc(10*sizeof(double));
+
+  double* raw_airspeed  = malloc(1*sizeof(double));
+
+
 
   int calibrate_flag = 1;
   int log_flag = 0;
@@ -85,8 +91,26 @@ int main(void){
 	//fprintf(fp,"New Log \n");
 	//fclose(fp); //move to end of programme
 
+	struct gps_data_t* gps_data = malloc(sizeof(struct gps_data_t));
+	int* ec = malloc(sizeof(int));
+  int gps_lock = 0;
+  int gps_read = 0;
+
+	if ((*ec = gps_open("localhost", "2947", gps_data)) == -1) {
+    		printf("code: %d, reason: %s\n", *ec, gps_errstr(*ec));
+    		return EXIT_FAILURE;
+	}
+
+	gps_stream(gps_data, WATCH_ENABLE | WATCH_JSON, NULL);
+
+	while(gps_lock == 0){
+		gps_lock = gps_lock_status(gps_data);
+	}
+
 
   while(1){
+
+		get_gps_coord(gps_data,ec);
 
     if(step == 8){
       step = 0;
@@ -117,6 +141,8 @@ int main(void){
         realAcc(raw_acc,acc,mean_values);
         realGyro(raw_gyro,gyro,mean_values);
         realMag(raw_mag,mag,mean_values);
+
+	      getAirspeed(raw_airspeed);
         // printf("gyro_x: %f \ngyro_y: %f \ngyro_z: %f\n",gyro[0], gyro[1], gyro[2]);
     	   fpNew = fopen(log_file_name,"a");
       	fprintf(fpNew,"%d,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",control[4],control[7],acc[0],acc[1],acc[2],gyro[0],gyro[1],gyro[2],mag[0],mag[1],mag[2]);
@@ -143,19 +169,23 @@ int main(void){
     }
 
 	  rx_length = read(uart0_filestream, (void*)message, 8);
-    if(rx_length > 7 && rx_length < 17){
-      for(int i =0; i < rx_length; i++){
-        if(i%2){
 
-          channel_id = last & 0b11111100;
-          channel_id = channel_id >> 2;
-          last = last << 8;
-          position = message[i] | last;
-          control[step] = (int32_t)(position);
-          step += 1;
-        }
-        last = message[i];
-      }
+    if(rx_length > 7 && rx_length < 17){
+
+      decode_spektrum(rx_length,channel_id,control,message,step);
+
+      // for(int i =0; i < rx_length; i++){
+      //   if(i%2){
+      //
+      //     channel_id = last & 0b11111100;
+      //     channel_id = channel_id >> 2;
+      //     last = last << 8;
+      //     position = message[i] | last;
+      //     control[step] = (int32_t)(position);
+      //     step += 1;
+      //   }
+      //   last = message[i];
+      // }
     }
   }
 
@@ -165,6 +195,8 @@ int main(void){
   free(raw_acc);
   free(raw_mag);
   free(mean_values);
+  free(raw_airspeed);
+  free(gps_data);
 
 	return 0;
 
