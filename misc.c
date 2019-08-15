@@ -196,3 +196,41 @@ void decode_spektrum(uint16_t rx_length,uint16_t channel_id,uint32_t* control,ui
     last = message[i];
   }
 }
+
+void get_heading_distance(double* curr_coord, double* dest_coord, double* distance, double* bearing){
+
+  double psi[2]; //Both latitude coordinates in radians  N_curr;N_dest
+  double lambda[2]; //both longitude coordinates in radians E_curr;E_dest
+
+  double R = 6371000; //earths radius in meters
+
+  double delta_psi = 0;
+  double delta_lambda = 0;
+
+  double a = 0;
+  double c = 0;
+  double d = 0;
+
+  double theta = 0; //bearing to current destination
+
+  psi[0] = curr_coord[0]*(M_PI/180);
+  psi[1] = dest_coord[0]*(M_PI/180);
+
+  lambda[0] = curr_coord[1]*(M_PI/180);
+  lambda[1] = dest_coord[1]*(M_PI/180);
+
+  delta_psi = (psi[1] - psi[0]);
+  delta_lambda = (lambda[1] - lambda[0]);
+
+  a = sin(delta_psi/2)*sin(delta_psi/2) + cos(psi[0])*cos(psi[1])*sin(delta_lambda/2)*sin(delta_lambda/2);
+  c = 2*atan2(sqrt(a),sqrt(1-a));
+  d = R*c;
+
+  theta = atan2(sin(delta_lambda)*cos(psi[1]),cos(psi[0])*sin(psi[1])-sin(psi[0])*cos(psi[1])*cos(delta_lambda))*(180/M_PI);
+
+  theta = (theta+360) % 360;
+
+  *bearing = theta;
+  *distance = d;
+
+}
