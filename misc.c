@@ -9,10 +9,12 @@
 #include <sys/ioctl.h>			//Needed for I2C port
 #include <linux/i2c-dev.h>		//Needed for I2C port
 #include <wiringPi.h>
+#include <gps.h>
 #include "misc.h"
 #include "hmc5883.h"
 #include "bmp085.h"
 #include "mpu6050.h"
+
 void calibrateSensors(double* means){
 
   int16_t* raw_gyro = malloc(4*sizeof(int16_t));
@@ -141,3 +143,94 @@ void calibrateSensors(double* means){
 		strcpy(f_name,filename);
 		return f_name;
 	}
+
+int gps_lock_status(struct gps_data_t* gps_data){
+	int rc;
+  if (gps_waiting (gps_data,100)) {
+      	/* read data */
+          if ((rc = gps_read(gps_data)) == -1) {
+            printf("error occured reading gps data. code: %d, reason: %s\n", rc, gps_errstr(rc));
+            return 0;
+        	} else {
+            /* Display data from the GPS receiver. */
+            			if ((gps_data->status == STATUS_FIX) &&
+               			(gps_data->fix.mode == MODE_2D || gps_data->fix.mode == MODE_3D) &&
+                		!isnan(gps_data->fix.latitude) &&
+                		!isnan(gps_data->fix.longitude) && !isnan(gps_data->fix.altitude)) {
+              return 1;
+            } else {
+              return 0;
+            }
+          }
+    }
+		return 0;
+
+}
+
+void get_gps_coord(struct gps_data_t* gps_data, int* error_code){
+
+	if (gps_waiting (gps_data,10000000)) {
+		/* read data */
+		if ((*error_code = gps_read(gps_data)) == -1) {
+	  	printf("error occured reading gps data. code: %d, reason: %s\n", *error_code, gps_errstr(*error_code));
+		}
+	}
+}
+
+void decode_spektrum(uint16_t rx_length,uint16_t channel_id,uint32_t* control,uint8_t* message,uint16_t step){
+
+  uint16_t position = 0;
+  uint16_t last = 0;
+
+  for(int i =0; i < rx_length; i++){
+
+    if(i%2){
+
+      channel_id = last & 0b11111100;
+      channel_id = channel_id >> 2;
+      last = last << 8;
+      position = message[i] | last;
+      control[step] = (int32_t)(position);
+      step += 1;
+    }
+    last = message[i];
+  }
+}
+
+void get_heading_distance(double* curr_coord, double* dest_coord, double* distance, double* bearing){
+
+  double psi[2]; //Both latitude coordinates in radians  N_curr;N_dest
+  double lambda[2]; //both longitude coordinates in radians E_curr;E_dest
+
+  double R = 6371000; //earths radius in meters
+
+  double delta_psi = 0;
+  double delta_lambda = 0;
+
+  double a = 0;
+  double c = 0;
+  double d = 0;
+
+  double theta = 0; //bearing to current destination
+
+  psi[0] = curr_coord[0]*(M_PI/180);
+  psi[1] = dest_coord[0]*(M_PI/180);
+
+  lambda[0] = curr_coord[1]*(M_PI/180);
+  lambda[1] = dest_coord[1]*(M_PI/180);
+
+  delta_psi = (psi[1] - psi[0]);
+  delta_lambda = (lambda[1] - lambda[0]);
+
+  a = sin(delta_psi/2)*sin(delta_psi/2) + cos(psi[0])*cos(psi[1])*sin(delta_lambda/2)*sin(delta_lambda/2);
+  c = 2*atan2(sqrt(a),sqrt(1-a));
+  d = R*c;
+
+  theta = atan2(sin(delta_lambda)*cos(psi[1]),cos(psi[0])*sin(psi[1])-sin(psi[0])*cos(psi[1])*cos(delta_lambda))*(180/M_PI);
+
+  theta = (theta+360) % 360;
+
+  *bearing = theta;
+  *distance = d;
+
+}

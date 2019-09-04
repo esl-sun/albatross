@@ -29,10 +29,13 @@ Configuring the IMU, retrieving the data from registers and converting to sensib
 ### MISC.c
 Calibration and creating new logging file.
 
+### GSM.py
+Responsible for sending the last line in the log file to a specific number via GSM.
+
 ### FLIGHT_TEST.c
 flight_test.c is the RC version of Albatross. Currently it is capable of controlling the servo's and logging the IMU data. When the specific commands are given by the test-pilot the system will calibrate and or start a new test. 
 
 ### How to Compile
 ```
-gcc -o flight *.c -lm -lwiringPi -Wall -lpthread -std=c11
+gcc -o flight *.c -lm -lwiringPi -Wall -lpthread -std=c11 -lgps
 ```
